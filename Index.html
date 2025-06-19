@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <?!= include('Stylesheet'); ?>
+  </head>
+  <body>
+    <div id="app-container">
+      <nav id="sidebar">
+        <div class="sidebar-header"><i class="fa-solid fa-headset"></i></div>
+        <ul class="sidebar-menu">
+          <li class="active"><a href="#" title="ระบบจัดการลูกค้า"><i class="fa-solid fa-users"></i></a></li>
+          <li><a href="#" title="รายงาน"><i class="fa-solid fa-chart-line"></i></a></li>
+          <li><a href="#" title="ตั้งค่า"><i class="fa-solid fa-gear"></i></a></li>
+        </ul>
+      </nav>
+      <main id="main-content">
+        <header id="main-header">
+          <h2>ระบบจัดการลูกค้า</h2>
+          <div class="header-actions">
+            <button class="btn btn-secondary"><i class="fa-solid fa-upload"></i> อัปโหลดข้อมูล</button>
+            <button class="btn btn-primary"><i class="fa-solid fa-plus"></i> เพิ่มลูกค้าใหม่</button>
+          </div>
+        </header>
+        <div id="filter-container">
+            <div class="status-filters">
+                <button class="status-tab active" data-status="ทั้งหมด">ทั้งหมด</button>
+                <button class="status-tab" data-status="New">ใหม่</button>
+                <button class="status-tab" data-status="Contacted">ติดต่อแล้ว</button>
+                <button class="status-tab" data-status="Qualified">มีแนวโน้ม</button>
+                <button class="status-tab" data-status="Closed-Won">ปิดการขาย</button>
+            </div>
+            <div class="search-filters">
+                <input type="text" placeholder="ค้นหาจาก ชื่อ, เบอร์โทร, อีเมล...">
+                <button class="btn btn-primary"><i class="fa-solid fa-search"></i> ค้นหา</button>
+            </div>
+        </div>
+        <div id="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>รหัสลูกค้า</th><th>ชื่อลูกค้า</th><th>เบอร์โทรศัพท์</th><th>ที่อยู่</th><th>สถานะ</th>
+              </tr>
+            </thead>
+            <tbody id="leads-table-body"></tbody>
+          </table>
+          <div id="no-data-message" class="hidden">ไม่พบข้อมูลลูกค้าในความดูแลของคุณ</div>
+        </div>
+      </main>
+    </div>
+    <div id="loader" class="hidden"><div class="spinner"></div></div>
+    
+    <div id="lead-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div id="modal-title-group">
+            <h3 id="modal-lead-name"></h3>
+            <small id="modal-address-display"></small>
+          </div>
+          <button id="close-modal-btn" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-main-layout">
+          <div id="modal-left-panel">
+            <div class="form-grid-single-col">
+              <h4 class="form-section-header">บันทึกการติดต่อ</h4>
+              <div class="form-grid">
+                  <div class="form-group full-width"><label>จับเวลาการโทร</label><div class="timer-container"><button id="call-timer-btn" class="btn btn-secondary"><i class="fa-solid fa-play"></i> เริ่มจับเวลา</button><span id="call-duration-display">ระยะเวลา: 00:00:00</span></div></div>
+                  <div class="form-group"><label for="call-outcome">สถานะการโทร</label><select id="call-outcome"><option value="">-- เลือก --</option><option value="รับสาย-ได้สนทนา">รับสาย-ได้สนทนา</option><option value="ไม่รับสาย">ไม่รับสาย</option><option value="ตัดสายทิ้ง">ตัดสายทิ้ง</option><option value="เบอร์ไม่ถูกต้อง">เบอร์ไม่ถูกต้อง</option></select></div>
+                  <div class="form-group"><label for="sales-status">สถานะการขาย</label><select id="sales-status"><option value="">-- เลือก --</option><option value="New">ใหม่ (New)</option><option value="Contacted">ติดต่อแล้ว (Contacted)</option><option value="Qualified">มีแนวโน้ม (Qualified)</option><option value="Closed-Won">ปิดการขาย (Closed-Won)</option><option value="Closed-Lost">ปิดการขาย (ไม่สำเร็จ)</option></select></div>
+                  <div class="form-group full-width"><label for="interaction-notes">บันทึกเพิ่มเติม</label><textarea id="interaction-notes" rows="4" placeholder="บันทึกรายละเอียดการสนทนาที่นี่..."></textarea></div>
+              </div>
+              
+              <h4 class="form-section-header">ข้อมูลการเกษตร</h4>
+              <div class="crop-row-header">
+                <label>พืชที่ปลูก</label>
+                <label>จำนวนไร่</label>
+                <label>จำนวนต้น</label>
+                <span></span>
+              </div>
+              <div id="crop-list-container"></div>
+              <button id="add-crop-btn" class="btn btn-secondary btn-small"><i class="fa-solid fa-plus"></i> เพิ่มรายการพืช</button>
+              
+              <h4 class="form-section-header">การนัดหมาย</h4>
+              <div class="form-group full-width"><label class="checkbox-container"><input type="checkbox" id="appointment-checkbox"> สร้างการนัดหมาย</label><input type="datetime-local" id="appointment-datetime" class="hidden"></div>
+            </div>
+          </div>
+          <div id="modal-right-panel">
+              <h4 class="form-section-header">ประวัติการซื้อ</h4>
+              <div class="form-group full-width">
+                <button id="view-sales-history-btn" class="btn btn-secondary"><i class="fa-solid fa-dollar-sign"></i> ดูประวัติการซื้อ</button>
+                <div id="sales-history-container" class="hidden"></div>
+              </div>
+              <h4 class="form-section-header">ประวัติการติดต่อ</h4>
+              <div class="form-group full-width">
+                <button id="view-activity-history-btn" class="btn btn-secondary"><i class="fa-solid fa-history"></i> ดูประวัติการติดต่อ</button>
+                <div id="activity-history-container" class="hidden"></div>
+              </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+           <button class="btn btn-secondary" id="cancel-modal-btn">ยกเลิก</button>
+           <button id="create-order-btn" class="btn btn-success"><i class="fa-solid fa-cart-plus"></i> สร้างออเดอร์</button>
+           <button class="btn btn-primary" id="save-modal-btn">บันทึกข้อมูล</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="order-modal" class="modal-overlay hidden">
+      <div class="modal-content"> <div class="modal-header">
+            <h3 id="order-modal-title">สร้างออเดอร์ใหม่</h3>
+            <button id="close-order-modal-btn" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="order-form-container">
+            <div class="form-grid">
+              <div class="form-group"><label>เลขที่ออเดอร์</label><input type="text" id="order-no" disabled></div>
+              <div class="form-group"><label>วันที่สั่งซื้อ</label><input type="text" id="order-date" disabled></div>
+              <div class="form-group"><label>ชื่อลูกค้า</label><input type="text" id="order-customer-name" disabled></div>
+              <div class="form-group"><label>เบอร์โทรศัพท์</label><input type="text" id="order-customer-phone" disabled></div>
+              <div class="form-group"><label>วันที่จัดส่ง</label><input type="date" id="shipping-date"></div>
+              <div class="form-group"><label>วิธีการจัดส่ง</label><input type="text" id="shipping-method" placeholder="เช่น Kerry, ไปรษณีย์, รับเอง"></div>
+            </div>
+            
+            <h4 class="form-section-header">รายการสินค้า</h4>
+            <div id="order-table-container">
+              <table id="order-details-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40%;">สินค้า</th>
+                    <th>ราคา/หน่วย</th>
+                    <th>จำนวน</th>
+                    <th>ส่วนลด/หน่วย</th>
+                    <th>ยอดรวม</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <button id="add-item-btn" class="btn btn-secondary btn-small"><i class="fa-solid fa-plus"></i> เพิ่มรายการ</button>
+            
+            <hr>
+            <div class="order-summary">
+              <div class="summary-item"><label>ยอดรวม</label><span id="sub-total">0.00</span></div>
+              <div class="summary-item"><label>ส่วนลดรวม</label><span id="total-discount">0.00</span></div>
+              <div class="summary-item"><label>ค่าใช้จ่ายเพิ่มเติม</label><input type="number" id="extra-charge" value="0"></div>
+              <div class="summary-item total"><label>ยอดสุทธิสุดท้าย</label><span id="grand-total">0.00</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-order-btn" class="btn btn-secondary">ยกเลิก</button>
+            <button id="save-order-btn" class="btn btn-primary"><i class="fa-solid fa-save"></i> บันทึกออเดอร์</button>
+        </div>
+      </div>
+    </div>
+
+    <?!= include('JavaScript'); ?>
+  </body>
+</html>

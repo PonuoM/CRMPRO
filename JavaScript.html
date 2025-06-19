@@ -1,0 +1,248 @@
+<script>
+    let loader, tableBody, statusFilters, noDataMessage, modal, closeModalBtn,
+        cancelModalBtn, modalLeadName, saveBtn, callTimerBtn, callDurationDisplay,
+        callOutcomeSelect, salesStatusSelect, notesTextarea, appointmentCheckbox,
+        appointmentDateTime, modalAddressDisplay, cropListContainer, addCropBtn,
+        viewSalesHistoryBtn, salesHistoryContainer, viewActivityHistoryBtn, activityHistoryContainer,
+        orderModal, closeOrderModalBtn, cancelOrderBtn, saveOrderBtn, addItemBtn,
+        orderCustomerInfo, orderCustomerNameInput, orderDateInput, shippingDateInput, shippingMethodInput,
+        orderDetailsTableBody, grandTotalCell;
+  
+    let allUserLeads = []; 
+    let allCrops = [];
+    let products = [];
+    let activeLeadId = null;
+    let orderLeadId = null;
+    let orderCustomerName = '';
+    let timerInterval = null;
+    let startTime = 0;
+    let callDurationSeconds = 0;
+  
+    document.addEventListener('DOMContentLoaded', () => {
+      initializeDOMElements();
+      setupEventListeners();
+      fetchAllUserLeads();
+      loadInitialOptions();
+    });
+  
+    function initializeDOMElements() {
+      loader = document.getElementById('loader');
+      tableBody = document.getElementById('leads-table-body');
+      statusFilters = document.querySelector('.status-filters');
+      noDataMessage = document.getElementById('no-data-message');
+      modal = document.getElementById('lead-modal');
+      closeModalBtn = document.getElementById('close-modal-btn');
+      cancelModalBtn = document.getElementById('cancel-modal-btn');
+      modalLeadName = document.getElementById('modal-lead-name');
+      saveBtn = document.getElementById('save-modal-btn');
+      callTimerBtn = document.getElementById('call-timer-btn');
+      callDurationDisplay = document.getElementById('call-duration-display');
+      callOutcomeSelect = document.getElementById('call-outcome');
+      salesStatusSelect = document.getElementById('sales-status');
+      notesTextarea = document.getElementById('interaction-notes');
+      appointmentCheckbox = document.getElementById('appointment-checkbox');
+      appointmentDateTime = document.getElementById('appointment-datetime');
+      modalAddressDisplay = document.getElementById('modal-address-display');
+      cropListContainer = document.getElementById('crop-list-container');
+      addCropBtn = document.getElementById('add-crop-btn');
+      viewSalesHistoryBtn = document.getElementById('view-sales-history-btn');
+      salesHistoryContainer = document.getElementById('sales-history-container');
+      viewActivityHistoryBtn = document.getElementById('view-activity-history-btn');
+      activityHistoryContainer = document.getElementById('activity-history-container');
+      orderModal = document.getElementById('order-modal');
+      closeOrderModalBtn = document.getElementById('close-order-modal-btn');
+      cancelOrderBtn = document.getElementById('cancel-order-btn');
+      saveOrderBtn = document.getElementById('save-order-btn');
+      addItemBtn = document.getElementById('add-item-btn');
+      orderCustomerInfo = document.getElementById('order-customer-info');
+      orderCustomerNameInput = document.getElementById('order-customer-name');
+      orderDateInput = document.getElementById('order-date');
+      shippingDateInput = document.getElementById('shipping-date');
+      shippingMethodInput = document.getElementById('shipping-method');
+      orderDetailsTableBody = document.querySelector('#order-details-table tbody');
+      grandTotalCell = document.getElementById('grand-total');
+    }
+  
+    function setupEventListeners() {
+      if (statusFilters) statusFilters.addEventListener('click', handleFilterClick);
+      if (tableBody) tableBody.addEventListener('click', handleRowClick);
+      if (closeModalBtn) closeModalBtn.addEventListener('click', closeLeadModal);
+      if (cancelModalBtn) cancelModalBtn.addEventListener('click', closeLeadModal);
+      if (modal) modal.addEventListener('click', (event) => { if (event.target.classList.contains('modal-overlay')) closeLeadModal(); });
+      if (appointmentCheckbox) appointmentCheckbox.addEventListener('change', toggleAppointmentInput);
+      if (callTimerBtn) callTimerBtn.addEventListener('click', toggleCallTimer);
+      if (saveBtn) saveBtn.addEventListener('click', saveInteraction);
+      if (viewSalesHistoryBtn) viewSalesHistoryBtn.addEventListener('click', handleViewSalesHistoryClick);
+      if (viewActivityHistoryBtn) viewActivityHistoryBtn.addEventListener('click', handleViewActivityHistoryClick);
+      if (addCropBtn) addCropBtn.addEventListener('click', () => addCropRow());
+      if (cropListContainer) {
+        cropListContainer.addEventListener('click', handleCropListClick);
+        cropListContainer.addEventListener('keyup', (event) => { if (event.target && event.target.classList.contains('crop-type-input')) { filterCropOptions(event); } });
+        cropListContainer.addEventListener('focusin', (event) => { if (event.target && event.target.classList.contains('crop-type-input')) { renderCropOptions(event.target.parentElement.querySelector('.combobox-options'), allCrops, event.target.value); } });
+      }
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('.combobox-container')) {
+          document.querySelectorAll('.combobox-options').forEach(el => el.classList.add('hidden'));
+        }
+      });
+      if (closeOrderModalBtn) closeOrderModalBtn.addEventListener('click', closeOrderModal);
+      if (cancelOrderBtn) cancelOrderBtn.addEventListener('click', closeOrderModal);
+      if (addItemBtn) addItemBtn.addEventListener('click', addOrderItemRow);
+      if (saveOrderBtn) saveOrderBtn.addEventListener('click', saveOrder);
+      if (orderDetailsTableBody) {
+        orderDetailsTableBody.addEventListener('change', handleTableChange);
+        orderDetailsTableBody.addEventListener('click', (e) => { if (e.target.matches('.delete-item-btn')) { e.target.closest('tr').remove(); updateGrandTotal(); }});
+      }
+    }
+  
+    function loadInitialOptions() {
+      google.script.run.withSuccessHandler(options => { allCrops = options; }).withFailureHandler(error => console.error("Failed to load crops: ", error)).getOptions('Crops');
+    }
+  
+    function renderCropRows(crops) {
+      if (!cropListContainer) return;
+      cropListContainer.innerHTML = '';
+      if (crops && crops.length > 0) {
+        crops.forEach(cropRow => addCropRow(cropRow));
+      } else {
+        addCropRow();
+      }
+    }
+  
+    function addCropRow(cropData = null) {
+        if (!cropListContainer) return;
+        const cropRowDiv = document.createElement('div');
+        cropRowDiv.className = 'crop-row';
+        const cropName = cropData ? cropData[2] : '';
+        const rai = cropData ? cropData[3] : '';
+        const plantCount = cropData ? cropData[4] : '';
+        cropRowDiv.innerHTML = `
+          <div class="form-group">
+            <div class="combobox-container">
+              <input type="text" class="crop-type-input" placeholder="พิมพ์เพื่อค้นหาพืช..." value="${cropName}" autocomplete="off">
+              <div class="combobox-options hidden"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <input type="number" class="rai-count-input" min="0" placeholder="จำนวนไร่" value="${rai}">
+          </div>
+          <div class="form-group">
+            <input type="number" class="plant-count-input" min="0" placeholder="จำนวนต้น" value="${plantCount}">
+          </div>
+          <button type="button" class="delete-crop-btn" title="ลบรายการนี้">&times;</button>
+        `;
+        cropListContainer.appendChild(cropRowDiv);
+    }
+  
+    function filterCropOptions(event) { const input = event.target; const filterText = input.value.toLowerCase(); const optionsContainer = input.parentElement.querySelector('.combobox-options'); const filtered = allCrops.filter(crop => crop.toLowerCase().includes(filterText)); renderCropOptions(optionsContainer, filtered, input.value); }
+    function renderCropOptions(container, options, currentText = '') { if (!container) return; container.innerHTML = ''; options.forEach(option => { const optionDiv = document.createElement('div'); optionDiv.className = 'combobox-option'; optionDiv.textContent = option; optionDiv.dataset.value = option; container.appendChild(optionDiv); }); const trimmedText = currentText.trim(); const exists = allCrops.some(c => c.trim().toLowerCase() === trimmedText.toLowerCase()); if (trimmedText && !exists) { const addDiv = document.createElement('div'); addDiv.className = 'combobox-add-btn'; addDiv.textContent = `+ เพิ่ม "${trimmedText}"`; addDiv.dataset.newCropName = trimmedText; container.appendChild(addDiv); } container.classList.remove('hidden'); }
+    function handleCropListClick(event) { const target = event.target; if (target.closest('.delete-crop-btn')) { target.closest('.crop-row').remove(); } else if (target.closest('.combobox-container')) { const container = target.closest('.combobox-container'); const comboboxInput = container.querySelector('input'); const optionsList = container.querySelector('.combobox-options'); if (target.matches('.combobox-option')) { comboboxInput.value = target.dataset.value; optionsList.classList.add('hidden'); } else if (target.matches('.combobox-add-btn')) { const newCrop = target.dataset.newCropName; const exists = allCrops.some(c => c.trim().toLowerCase() === newCrop.trim().toLowerCase()); if(exists) { alert("พืชชนิดนี้มีอยู่แล้วในระบบ"); return; } showLoader(true); google.script.run.withSuccessHandler(result => { showLoader(false); if (result.status === 'success') { allCrops.push(result.newCrop); allCrops.sort(); comboboxInput.value = result.newCrop; optionsList.classList.add('hidden'); } else { alert(result.message); } }).withFailureHandler(showError).addNewCrop(newCrop); } } }
+    function handleFilterClick(event) { if (event.target.classList.contains('status-tab')) { const status = event.target.dataset.status; document.querySelectorAll('.status-tab').forEach(tab => tab.classList.remove('active')); event.target.classList.add('active'); const filteredLeads = (status === 'ทั้งหมด') ? allUserLeads : allUserLeads.filter(lead => lead.full[7] === status); populateTable(filteredLeads); } }
+    function handleRowClick(event) { const row = event.target.closest('tr'); if (row) { openLeadModal(row.dataset.leadId); } }
+    function handleViewSalesHistoryClick() { if (!activeLeadId) return; salesHistoryContainer.classList.remove('hidden'); salesHistoryContainer.innerHTML = '<div class="spinner" style="margin: 20px auto;"></div>'; google.script.run.withSuccessHandler(populateSalesHistoryTable).withFailureHandler(error => { salesHistoryContainer.innerHTML = `<p style="text-align:center; padding: 20px;">เกิดข้อผิดพลาด: ${error.message}</p>`; }).getSalesHistoryForLead(activeLeadId); }
+    function handleViewActivityHistoryClick() { if (!activeLeadId) return; activityHistoryContainer.classList.remove('hidden'); activityHistoryContainer.innerHTML = '<div class="spinner" style="margin: 20px auto;"></div>'; google.script.run.withSuccessHandler(populateActivityHistoryTable).withFailureHandler(error => { activityHistoryContainer.innerHTML = `<p style="text-align:center; padding: 20px;">เกิดข้อผิดพลาด: ${error.message}</p>`; }).getActivityHistoryForLead(activeLeadId); }
+    function fetchAllUserLeads() { showLoader(true); google.script.run.withSuccessHandler(data => { allUserLeads = data; populateTable(allUserLeads); showLoader(false); }).withFailureHandler(showError).getMyLeads('ทั้งหมด'); }
+    function populateTable(data) { if (!tableBody) return; tableBody.innerHTML = ''; if (noDataMessage) noDataMessage.classList.add('hidden'); if (data && data.length > 0) { data.forEach((leadObject, index) => { const displayData = leadObject.display; const leadId = displayData[0]; const tr = document.createElement('tr'); tr.dataset.leadId = leadId; tr.style.cursor = 'pointer'; const thaiStatus = displayData[4]; const statusCssClass = (String(displayData[5] || 'default')).toLowerCase(); tr.innerHTML = `<td>${index + 1}</td><td>${leadId}</td><td>${displayData[1]}</td><td>${displayData[2]}</td><td>${displayData[3]}</td><td><span class="status-badge ${statusCssClass}">${thaiStatus}</span></td>`; tableBody.appendChild(tr); }); } else { if (noDataMessage) noDataMessage.classList.remove('hidden'); } }
+    function populateSalesHistoryTable(historyData) { if (!historyData || historyData.length === 0) { salesHistoryContainer.innerHTML = `<p style="text-align:center; padding: 20px;">ไม่พบประวัติการซื้อ</p>`; return; } let tableHTML = '<table class="history-table"><thead><tr><th>วันที่</th><th>สินค้า</th><th>จำนวน</th><th>ราคา</th><th>พนักงานขาย</th></tr></thead><tbody>'; historyData.forEach(row => { tableHTML += `<tr><td>${row[7]}</td><td>${row[3]}</td><td>${row[4]}</td><td>${Number(row[6]).toLocaleString('th-TH')}</td><td>${row[2]}</td></tr>`; }); tableHTML += '</tbody></table>'; salesHistoryContainer.innerHTML = tableHTML; }
+    function populateActivityHistoryTable(activityData) { if (!activityData || activityData.length === 0) { activityHistoryContainer.innerHTML = `<p style="text-align:center; padding: 20px;">ไม่พบประวัติการติดต่อ</p>`; return; } let tableHTML = '<table class="history-table"><thead><tr><th>วันที่</th><th>สถานะการโทร</th><th>สถานะการขาย</th><th>ผู้ติดต่อ</th><th>บันทึก</th></tr></thead><tbody>'; activityData.forEach(row => { tableHTML += `<tr><td>${row[2]}</td><td>${row[4]}</td><td>${row[5]}</td><td>${row[3]}</td><td>${row[6]}</td></tr>`; }); tableHTML += '</tbody></table>'; activityHistoryContainer.innerHTML = tableHTML; }
+    function showLoader(show) { if (loader) { if (show) { loader.style.display = 'flex'; } else { loader.style.display = 'none'; } } }
+    function toggleAppointmentInput() { appointmentDateTime.classList.toggle('hidden', !this.checked); }
+    function toggleCallTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; callTimerBtn.innerHTML = '<i class="fa-solid fa-play"></i> เริ่มจับเวลา'; callTimerBtn.classList.replace('btn-primary', 'btn-secondary'); } else { startTime = Date.now(); callTimerBtn.innerHTML = '<i class="fa-solid fa-stop"></i> หยุดจับเวลา'; callTimerBtn.classList.replace('btn-secondary', 'btn-primary'); timerInterval = setInterval(updateTimerDisplay, 1000); } }
+    function updateTimerDisplay() { callDurationSeconds = Math.round((Date.now() - startTime) / 1000); const h = Math.floor(callDurationSeconds / 3600).toString().padStart(2, '0'); const m = Math.floor((callDurationSeconds % 3600) / 60).toString().padStart(2, '0'); const s = (callDurationSeconds % 60).toString().padStart(2, '0'); callDurationDisplay.textContent = `ระยะเวลา: ${h}:${m}:${s}`; }
+    
+    function openLeadModal(leadId) {
+      activeLeadId = leadId;
+      resetForm();
+      if (salesHistoryContainer) salesHistoryContainer.classList.add('hidden');
+      if (activityHistoryContainer) activityHistoryContainer.classList.add('hidden');
+      modal.classList.remove('hidden');
+      modalLeadName.textContent = "กำลังโหลดข้อมูล...";
+      google.script.run
+        .withSuccessHandler(details => {
+          if(!details || !details.leadData) { showError({message: "ไม่สามารถโหลดข้อมูลลูกค้าได้"}); return; }
+          const lead = details.leadData;
+          const leadCrops = details.leadCrops;
+          modalLeadName.textContent = `ลูกค้า: ${lead.FirstName} ${lead.LastName}`;
+          const fullAddress = [lead.Address, lead.SubDistrict, lead.District, lead.Province, lead.PostalCode].filter(Boolean).join(' ');
+          modalAddressDisplay.textContent = fullAddress || "ไม่มีข้อมูลที่อยู่";
+          salesStatusSelect.value = lead.Status;
+          renderCropRows(leadCrops);
+          if (viewSalesHistoryBtn) viewSalesHistoryBtn.disabled = false;
+          if (viewActivityHistoryBtn) viewActivityHistoryBtn.disabled = false;
+          notesTextarea.placeholder = "กำลังโหลดบันทึกล่าสุด...";
+          google.script.run
+              .withSuccessHandler(lastActivity => {
+                  if (lastActivity) {
+                      callOutcomeSelect.value = lastActivity.CallOutcome || '';
+                      notesTextarea.value = lastActivity.Notes || '';
+                  } else {
+                      notesTextarea.placeholder = "ไม่พบบันทึกก่อนหน้า เริ่มบันทึกใหม่ที่นี่...";
+                  }
+              })
+              .withFailureHandler(error => {
+                  console.error("Failed to load last activity:", error);
+                  notesTextarea.placeholder = "เกิดข้อผิดพลาดในการโหลดบันทึก";
+              })
+              .getLastActivityForLead(leadId);
+        })
+        .withFailureHandler(showError)
+        .getLeadDetails(leadId);
+    }
+  
+    function closeLeadModal() { if (timerInterval) toggleCallTimer(); if(salesHistoryContainer) salesHistoryContainer.classList.add('hidden'); if(activityHistoryContainer) activityHistoryContainer.classList.add('hidden'); modal.classList.add('hidden'); }
+    function resetForm() { callOutcomeSelect.value = ""; salesStatusSelect.value = ""; notesTextarea.value = ""; appointmentCheckbox.checked = false; appointmentDateTime.classList.add('hidden'); appointmentDateTime.value = ""; callDurationSeconds = 0; callDurationDisplay.textContent = "ระยะเวลา: 00:00:00"; if(modalAddressDisplay) modalAddressDisplay.textContent = ""; if(cropListContainer) cropListContainer.innerHTML = ""; if(viewSalesHistoryBtn) viewSalesHistoryBtn.disabled = true; if(viewActivityHistoryBtn) viewActivityHistoryBtn.disabled = true; }
+    
+    function handleSaveSuccess(result) {
+      const status = salesStatusSelect.value;
+      const leadName = modalLeadName.textContent;
+      closeLeadModal();
+      fetchAllUserLeads(); // Always refresh main table
+      if (status === 'Closed-Won') {
+        alert('บันทึกข้อมูลสำเร็จ! กำลังเปิดหน้าสร้างออเดอร์...');
+        openOrderModal(activeLeadId, leadName);
+      }
+    }
+  
+    function saveInteraction() {
+      const interactionData = { callOutcome: callOutcomeSelect.value, newSalesStatus: salesStatusSelect.value, notes: notesTextarea.value, callDuration: callDurationSeconds, appointmentDate: appointmentCheckbox.checked ? appointmentDateTime.value : null };
+      const cropData = [];
+      document.querySelectorAll('.crop-row').forEach(row => {
+        const nameInput = row.querySelector('.crop-type-input');
+        const raiInput = row.querySelector('.rai-count-input');
+        const plantsInput = row.querySelector('.plant-count-input');
+        if (nameInput && nameInput.value) { cropData.push({ name: nameInput.value, rai: raiInput.value, plants: plantsInput.value }); }
+      });
+      if (!interactionData.callOutcome || !interactionData.newSalesStatus) { alert('กรุณาเลือก "สถานะการโทร" และ "สถานะการขาย"'); return; }
+      showLoader(true);
+      google.script.run.withSuccessHandler(handleSaveSuccess).withFailureHandler(showError).saveInteractionAndData({ leadId: activeLeadId, interactionData: interactionData, cropData: cropData });
+    }
+    
+    function showError(error) { showLoader(false); alert('Error: ' + error.message); }
+  
+    function openOrderModal(leadId, name) {
+      orderLeadId = leadId;
+      orderCustomerName = name;
+      if (orderCustomerNameInput) orderCustomerNameInput.value = name;
+      orderDateInput.value = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit'});
+      orderDetailsTableBody.innerHTML = '';
+      updateGrandTotal();
+      if (products.length === 0) {
+        showLoader(true);
+        google.script.run.withSuccessHandler(loadedProducts => {
+            products = loadedProducts;
+            addOrderItemRow();
+            orderModal.classList.remove('hidden');
+            showLoader(false);
+          }).withFailureHandler(showError).getProducts();
+      } else {
+        addOrderItemRow();
+        orderModal.classList.remove('hidden');
+      }
+    }
+    function closeOrderModal() { if(orderModal) orderModal.classList.add('hidden'); }
+    function addOrderItemRow() { const productOptions = products.map(p => `<option value="${p.ProductID}" data-price="${p.Price}">${p.ProductName}</option>`).join(''); const newRow = orderDetailsTableBody.insertRow(); newRow.innerHTML = `<td><select class="product-select"><option value="">-- เลือกสินค้า --</option>${productOptions}</select></td><td class="price-cell">0.00</td><td><input type="number" class="quantity-input" value="1" min="1"></td><td class="subtotal-cell">0.00</td><td style="text-align:center;"><button type="button" class="delete-item-btn">&times;</button></td>`; }
+    function handleTableChange(event) { if (event.target.matches('.product-select, .quantity-input')) { updateRow(event.target.closest('tr')); } }
+    function updateRow(row) { const productSelect = row.querySelector('.product-select'); const quantityInput = row.querySelector('.quantity-input'); const priceCell = row.querySelector('.price-cell'); const subtotalCell = row.querySelector('.subtotal-cell'); const selectedOption = productSelect.options[productSelect.selectedIndex]; const price = parseFloat(selectedOption.dataset.price || 0); const quantity = parseInt(quantityInput.value || 0); const subtotal = price * quantity; priceCell.textContent = price.toFixed(2); subtotalCell.textContent = subtotal.toFixed(2); updateGrandTotal(); }
+    function updateGrandTotal() { let total = 0; document.querySelectorAll('#order-details-table tbody tr').forEach(row => { total += parseFloat(row.querySelector('.subtotal-cell').textContent || 0); }); grandTotalCell.textContent = total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function saveOrder() { showLoader(true); const orderHeader = { leadId: orderLeadId, customerName: orderCustomerName, shippingDate: shippingDateInput.value, shippingMethod: shippingMethodInput.value, totalAmount: parseFloat(grandTotalCell.textContent.replace(/,/g, '')) }; const orderDetails = []; document.querySelectorAll('#order-details-table tbody tr').forEach(row => { const productSelect = row.querySelector('.product-select'); if (productSelect.value) { orderDetails.push({ productId: productSelect.value, productName: productSelect.options[productSelect.selectedIndex].text, quantity: parseInt(row.querySelector('.quantity-input').value), price: parseFloat(row.querySelector('.price-cell').textContent), subtotal: parseFloat(row.querySelector('.subtotal-cell').textContent) }); } }); if(orderDetails.length === 0) { alert('กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ'); showLoader(false); return; } google.script.run.withSuccessHandler(result => { showLoader(false); alert(result.message); if(result.status === 'success') { closeOrderModal(); } }).withFailureHandler(showError).saveOrder({ orderHeader, orderDetails }); }
+  </script>
